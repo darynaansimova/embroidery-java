@@ -27,6 +27,7 @@ public class TryWindow2 extends Application {
 
     private static final int EMBROIDERY_SIZE = 11;
     private static final int CROSS_SIZE = 15;
+    private static final double MIN_SIZE = 0.5;
     private static final boolean[][] LETTER_D = {
             {},
             {},
@@ -254,7 +255,7 @@ public class TryWindow2 extends Application {
                     rectangle.setX((double) WINDOW_SIZE / 2 + CROSS_SIZE*j);
                     rectangle.setY((double) WINDOW_SIZE / 2 - (double) ((EMBROIDERY_SIZE*2-1) * CROSS_SIZE) / 2 + CROSS_SIZE*i);
                     group.getChildren().add(rectangle);
-                    FadeTransition tr = new FadeTransition(Duration.millis(200), rectangle);
+                    FadeTransition tr = new FadeTransition(Duration.millis(100), rectangle);
                     tr.setFromValue(0);
                     tr.setToValue(1);
                     transition.getChildren().add(tr);
@@ -287,6 +288,8 @@ public class TryWindow2 extends Application {
             double height = main.getBoundsInParent().getHeight();
             double width = main.getBoundsInParent().getWidth();
 
+            double scaleOld = main.getScaleX();
+
             if(height*2>width) {
                 // Масштабуємо
                 main.setScaleX(main.getScaleX() * 0.5);
@@ -306,6 +309,12 @@ public class TryWindow2 extends Application {
 
             main.setLayoutX(main.getLayoutX() + dx);
             main.setLayoutY(main.getLayoutY() + dy);
+
+            if((main.getScaleX()<scaleOld
+                    || (main.getScaleX()==scaleOld && main.getBoundsInParent().getHeight()*2>main.getBoundsInParent().getWidth()))
+                    && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
+                button.setDisable(true);
+            }
         });
 
         button2.setOnAction(actionEvent -> {
@@ -315,6 +324,8 @@ public class TryWindow2 extends Application {
 
             double height = main.getBoundsInParent().getHeight();
             double width = main.getBoundsInParent().getWidth();
+
+            double scaleOld = main.getScaleY();
 
             if(width*2>height) {
                 // Масштабуємо
@@ -335,6 +346,12 @@ public class TryWindow2 extends Application {
 
             main.setLayoutX(main.getLayoutX() + dx);
             main.setLayoutY(main.getLayoutY() + dy);
+
+            if((main.getScaleY()<scaleOld
+                    || (main.getScaleY()==scaleOld && main.getBoundsInParent().getWidth()*2>main.getBoundsInParent().getHeight()))
+                    && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
+                button2.setDisable(true);
+            }
         });
 
     }
