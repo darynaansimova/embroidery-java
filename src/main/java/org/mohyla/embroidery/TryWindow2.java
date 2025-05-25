@@ -2,24 +2,19 @@ package org.mohyla.embroidery;
 
 import javafx.animation.FadeTransition;
 import javafx.animation.SequentialTransition;
-import javafx.animation.TranslateTransition;
 import javafx.application.Application;
 import javafx.geometry.Bounds;
 import javafx.scene.Group;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.ImagePattern;
 import javafx.scene.paint.Paint;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontSmoothingType;
 import javafx.scene.text.Text;
-import javafx.scene.transform.Translate;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
@@ -141,10 +136,12 @@ public class TryWindow2 extends Application {
 
         main = mirrorY(main, false, true);
 
-        button.setDisable(false);
-        button2.setDisable(false);
-
         transition.play();
+
+        transition.setOnFinished(event -> {
+                    button.setDisable(false);
+                    button2.setDisable(false);
+                });
     }
 
     private Group mirrorX(Group original, boolean includeCenter, boolean doTransition) {
