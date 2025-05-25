@@ -93,11 +93,12 @@ public class TryWindow2 extends Application {
             {},
             {}};
     private static final boolean[][][] NAME = {LETTER_D, LETTER_A, LETTER_R, LETTER_Y, LETTER_N, LETTER_A};
-    private static int rows = 1;
-    private static int cols = 1;
-    private static Group root = new Group();
+    private static final Group root = new Group();
     private static Group main = new Group();
-    private static Group additional = new Group();
+    private static final Group additional = new Group();
+    private static final Button button = new Button();
+    private static final Button button2 = new Button();
+    SequentialTransition transition = new SequentialTransition();
     @Override
     public void start(Stage stage){
         stage.setTitle("TryWindow");
@@ -122,26 +123,11 @@ public class TryWindow2 extends Application {
         text.setY(text.getBoundsInLocal().getHeight());
         root.getChildren().add(text);
 
-        Button button = new Button();
-        button.setText("Відобразити горизонтально");
-        button.setFont(new Font("Helvetica", 20));
-        button.setLayoutX((double) (WINDOW_SIZE / 4));
-        button.setLayoutY((double) (WINDOW_SIZE * 4) /5);
-        button.setDisable(true);
-        root.getChildren().add(button);
-
-        Button button2 = new Button();
-        button2.setText("Відобразити вертикально");
-        button2.setFont(new Font("Helvetica", 20));
-        button2.setLayoutX((double) (WINDOW_SIZE / 4));
-        button2.setLayoutY(button.getLayoutY()+ 50);
-        button2.setDisable(true);
-        root.getChildren().add(button2);
+        initButtons();
 
         root.getChildren().add(main);
         root.getChildren().add(additional);
 
-        SequentialTransition letterTransition = new SequentialTransition();
         for (boolean[][] oneLetter : NAME) {
             main = embroidery(main, oneLetter, Color.BLACK);
         }
@@ -151,82 +137,17 @@ public class TryWindow2 extends Application {
 
         main = embroidery(main, addP, Color.DARKRED);
 
-        main = mirrorX(main, false);
+        main = mirrorX(main, false, true);
 
-        main = mirrorY(main, false);
+        main = mirrorY(main, false, true);
 
         button.setDisable(false);
         button2.setDisable(false);
 
-        button.setOnAction(actionEvent -> {
-            // Центр до масштабування
-            double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-            double height = main.getBoundsInParent().getHeight();
-            double width = main.getBoundsInParent().getWidth();
-
-            /*main.setScaleX(main.getScaleX() * width/(height*2));
-            main.setScaleY(main.getScaleY() * width/(height*2));*/
-
-            if(height*2>width) {
-                // Масштабуємо
-                main.setScaleX(main.getScaleX() * 0.5);
-                main.setScaleY(main.getScaleY() * 0.5);
-            }
-
-            // Дзеркалимо
-            main = mirrorX(main, true);
-
-            // Центр після змін
-            double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-            // Компенсуємо зсув
-            double dx = centerXBefore - centerXAfter;
-            double dy = centerYBefore - centerYAfter;
-
-            main.setLayoutX(main.getLayoutX() + dx);
-            main.setLayoutY(main.getLayoutY() + dy);
-        });
-
-        button2.setOnAction(actionEvent -> {
-            // Зберігаємо центр до трансформацій
-            double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-            double height = main.getBoundsInParent().getHeight();
-            double width = main.getBoundsInParent().getWidth();
-
-            /*double scale = height/(width*2);
-            main.setScaleX(main.getScaleX() * scale);
-            main.setScaleY(main.getScaleY() * scale);*/
-
-            if(width*2>height) {
-                // Масштабуємо
-                main.setScaleX(main.getScaleX() * 0.5);
-                main.setScaleY(main.getScaleY() * 0.5);
-            }
-
-            // Дзеркалимо по осі Y (горизонтальній)
-            main = mirrorY(main, true);
-
-            // Зберігаємо центр після трансформацій
-            double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-            // Компенсуємо зміщення, щоб зберегти положення по центру
-            double dx = centerXBefore - centerXAfter;
-            double dy = centerYBefore - centerYAfter;
-
-            main.setLayoutX(main.getLayoutX() + dx);
-            main.setLayoutY(main.getLayoutY() + dy);
-        });
-
-
+        transition.play();
     }
 
-    private Group mirrorX(Group original, boolean includeCenter) {
+    private Group mirrorX(Group original, boolean includeCenter, boolean doTransition) {
         Bounds bounds = original.getBoundsInLocal();
         double centerY = (bounds.getMinY() + bounds.getMaxY()) / 2;
         double height = bounds.getHeight();
@@ -246,14 +167,21 @@ public class TryWindow2 extends Application {
                 Rectangle mirroredRect = new Rectangle(r.getX(), mirroredY, r.getWidth(), r.getHeight());
                 mirroredRect.setFill(paint);
 
-                original.getChildren().add(mirroredRect); // ✅ тепер безпечно
+                original.getChildren().add(mirroredRect);
+
+                if(doTransition) {
+                    FadeTransition tr = new FadeTransition(Duration.millis(50), mirroredRect);
+                    tr.setFromValue(0);
+                    tr.setToValue(1);
+                    transition.getChildren().add(tr);
+                }
             }
         }
 
         return original;
     }
 
-    private Group mirrorY(Group original, boolean includeCenter) {
+    private Group mirrorY(Group original, boolean includeCenter, boolean doTransition) {
         Bounds bounds = original.getBoundsInLocal();
         double centerX = (bounds.getMinX() + bounds.getMaxX()) / 2;
         double width = bounds.getWidth();
@@ -274,6 +202,13 @@ public class TryWindow2 extends Application {
                 mirroredRect.setFill(paint);
 
                 original.getChildren().add(mirroredRect);
+
+                if(doTransition) {
+                    FadeTransition tr = new FadeTransition(Duration.millis(50), mirroredRect);
+                    tr.setFromValue(0);
+                    tr.setToValue(1);
+                    transition.getChildren().add(tr);
+                }
             }
         }
 
@@ -322,9 +257,88 @@ public class TryWindow2 extends Application {
                     rectangle.setX((double) WINDOW_SIZE / 2 + CROSS_SIZE*j);
                     rectangle.setY((double) WINDOW_SIZE / 2 - (double) ((EMBROIDERY_SIZE*2-1) * CROSS_SIZE) / 2 + CROSS_SIZE*i);
                     group.getChildren().add(rectangle);
+                    FadeTransition tr = new FadeTransition(Duration.millis(200), rectangle);
+                    tr.setFromValue(0);
+                    tr.setToValue(1);
+                    transition.getChildren().add(tr);
                 }
             }
         }
         return group;
+    }
+
+    private void initButtons(){
+        button.setText("Відобразити горизонтально");
+        button.setFont(new Font("Helvetica", 20));
+        button.setLayoutX((double) (WINDOW_SIZE / 4));
+        button.setLayoutY((double) (WINDOW_SIZE * 4) /5);
+        button.setDisable(true);
+        root.getChildren().add(button);
+
+        button2.setText("Відобразити вертикально");
+        button2.setFont(new Font("Helvetica", 20));
+        button2.setLayoutX((double) (WINDOW_SIZE / 4));
+        button2.setLayoutY(button.getLayoutY()+ 50);
+        button2.setDisable(true);
+        root.getChildren().add(button2);
+
+        button.setOnAction(actionEvent -> {
+            // Центр до масштабування
+            double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+            double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+            double height = main.getBoundsInParent().getHeight();
+            double width = main.getBoundsInParent().getWidth();
+
+            if(height*2>width) {
+                // Масштабуємо
+                main.setScaleX(main.getScaleX() * 0.5);
+                main.setScaleY(main.getScaleY() * 0.5);
+            }
+
+            // Дзеркалимо
+            main = mirrorX(main, true, false);
+
+            // Центр після змін
+            double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+            double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+            // Компенсуємо зсув
+            double dx = centerXBefore - centerXAfter;
+            double dy = centerYBefore - centerYAfter;
+
+            main.setLayoutX(main.getLayoutX() + dx);
+            main.setLayoutY(main.getLayoutY() + dy);
+        });
+
+        button2.setOnAction(actionEvent -> {
+            // Зберігаємо центр до трансформацій
+            double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+            double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+            double height = main.getBoundsInParent().getHeight();
+            double width = main.getBoundsInParent().getWidth();
+
+            if(width*2>height) {
+                // Масштабуємо
+                main.setScaleX(main.getScaleX() * 0.5);
+                main.setScaleY(main.getScaleY() * 0.5);
+            }
+
+            // Дзеркалимо по осі Y (горизонтальній)
+            main = mirrorY(main, true, false);
+
+            // Зберігаємо центр після трансформацій
+            double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+            double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+            // Компенсуємо зміщення, щоб зберегти положення по центру
+            double dx = centerXBefore - centerXAfter;
+            double dy = centerYBefore - centerYAfter;
+
+            main.setLayoutX(main.getLayoutX() + dx);
+            main.setLayoutY(main.getLayoutY() + dy);
+        });
+
     }
 }
