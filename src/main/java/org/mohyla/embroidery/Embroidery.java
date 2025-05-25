@@ -21,7 +21,7 @@ import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TryWindow2 extends Application {
+public class Embroidery extends Application {
 
     private static final int WINDOW_SIZE = 600;
 
@@ -97,7 +97,7 @@ public class TryWindow2 extends Application {
     SequentialTransition transition = new SequentialTransition();
     @Override
     public void start(Stage stage){
-        stage.setTitle("TryWindow");
+        stage.setTitle("Вишивка");
         stage.setResizable(false);
         Paint paint = Color.BEIGE;
         embroideryRoot();
