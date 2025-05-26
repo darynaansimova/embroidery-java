@@ -11,6 +11,7 @@ import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ColorPicker;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.PixelReader;
@@ -136,6 +137,28 @@ class EmbroideryModel {
     private Group mainPattern = new Group();
     private Group additionalPattern = new Group();
     private SequentialTransition animation = new SequentialTransition();
+    private Group editTools;
+    private EditMode editMode = EditMode.PAINT;
+
+    public enum EditMode {
+        PAINT, ERASE
+    }
+
+    public Group getEditTools() {
+        return editTools;
+    }
+
+    public void setEditTools(Group editTools) {
+        this.editTools = editTools;
+    }
+
+    public EditMode getEditMode() {
+        return editMode;
+    }
+
+    public void setEditMode(EditMode editMode) {
+        this.editMode = editMode;
+    }
 
     public Color getMainColor() {
         return mainColor;
@@ -184,6 +207,7 @@ class EmbroideryView {
     private final Button colorButton;
     private final Button saveButton;
     private final Button loadButton;
+    private final Button editButton;
 
     public EmbroideryView(EmbroideryModel model) {
         // Initialize title text
@@ -212,6 +236,10 @@ class EmbroideryView {
         loadButton.setFont(new Font("Helvetica", 10));
         loadButton.setDisable(true);
 
+        editButton = new Button("Редагувати");
+        editButton.setFont(new Font("Helvetica", 10));
+        editButton.setDisable(true);
+
         // Add all elements to root
         root.getChildren().addAll(
                 titleText,
@@ -221,7 +249,8 @@ class EmbroideryView {
                 mirrorYButton,
                 colorButton,
                 saveButton,
-                loadButton
+                loadButton,
+                editButton
         );
 
         // Position elements
@@ -241,6 +270,9 @@ class EmbroideryView {
 
         mirrorYButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE / 3) - mirrorYButton.getWidth() / 2);
         mirrorYButton.setLayoutY(mirrorXButton.getLayoutY() + mirrorXButton.getHeight() + 5);
+
+        editButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE / 3) - editButton.getWidth() / 2);
+        editButton.setLayoutY(mirrorYButton.getLayoutY() + editButton.getHeight() + 5);
 
         colorButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE * 2 / 3) - colorButton.getWidth() / 2);
         colorButton.setLayoutY(baseY);
@@ -276,6 +308,10 @@ class EmbroideryView {
         return loadButton;
     }
 
+    public Button getEditButton() {
+        return editButton;
+    }
+
     public void updateTitleColor(Color color) {
         titleText.setFill(color);
     }
@@ -301,6 +337,93 @@ class EmbroideryController {
         view.getColorButton().setOnAction(event -> changeColor());
         view.getSaveButton().setOnAction(event -> savePattern());
         view.getLoadButton().setOnAction(event -> loadPattern());
+        view.getEditButton().setOnAction(event -> editPattern());
+    }
+
+    private void editPattern() {
+        if (view.getEditButton().getText().equals("Редагувати")) {
+            // Enter edit mode
+            view.getEditButton().setText("Готово");
+
+            // Disable other buttons while editing
+            view.getMirrorXButton().setDisable(true);
+            view.getMirrorYButton().setDisable(true);
+            view.getColorButton().setDisable(true);
+            view.getSaveButton().setDisable(true);
+            view.getLoadButton().setDisable(true);
+
+            // Create editing tools
+            Group editTools = new Group();
+
+            // Create a fine grid overlay
+            Group gridOverlay = new Group();
+            for (int i = ((int)model.getMainPattern().getBoundsInLocal().getMinX() % EmbroideryConstants.CROSS_SIZE); i < EmbroideryConstants.WINDOW_SIZE; i += EmbroideryConstants.CROSS_SIZE) {
+                for (int j = ((int)model.getMainPattern().getBoundsInLocal().getMinY() % EmbroideryConstants.CROSS_SIZE); j < EmbroideryConstants.WINDOW_SIZE; j += EmbroideryConstants.CROSS_SIZE) {
+                    Rectangle gridCell = new Rectangle(i, j, 1, 1);
+                    gridCell.setFill(Color.BLACK);
+                    gridOverlay.getChildren().add(gridCell);
+                }
+            }
+
+            // Create color picker
+            ColorPicker colorPicker = new ColorPicker(model.getMainColor());
+            colorPicker.setLayoutX(10);
+            colorPicker.setLayoutY(10);
+
+            // Create rubber (eraser) button
+            Button rubberButton = new Button("Гумка");
+            rubberButton.setLayoutX(10);
+            rubberButton.setLayoutY(50);
+
+            // Add tools to edit group
+            editTools.getChildren().addAll(gridOverlay, colorPicker, rubberButton);
+
+            // Store reference to edit tools in model
+            model.setEditTools(editTools);
+
+            // Add edit tools to root
+            view.getRoot().getChildren().add(editTools);
+
+            // Set up mouse interaction for editing
+            model.getMainPattern().setOnMousePressed(e -> {
+                if (e.getTarget() instanceof Rectangle) {
+                    Rectangle target = (Rectangle) e.getTarget();
+                    if (e.isShiftDown() || model.getEditMode()== EmbroideryModel.EditMode.ERASE) { // Use rubber when Shift is pressed
+                        target.setFill(Color.TRANSPARENT);
+                    } else {
+                        target.setFill(colorPicker.getValue());
+                    }
+                }
+            });
+
+            // Set up rubber button action
+            rubberButton.setOnAction(e -> {
+                model.setEditMode(EmbroideryModel.EditMode.ERASE);
+            });
+
+            // Set up color picker change listener
+            colorPicker.setOnAction(e -> {
+                model.setEditMode(EmbroideryModel.EditMode.PAINT);
+            });
+
+        } else {
+            // Exit edit mode
+            view.getEditButton().setText("Редагувати");
+
+            // Re-enable other buttons
+            view.getMirrorXButton().setDisable(false);
+            view.getMirrorYButton().setDisable(false);
+            view.getColorButton().setDisable(false);
+            view.getSaveButton().setDisable(false);
+            view.getLoadButton().setDisable(false);
+            view.getEditButton().setDisable(false);
+
+            // Remove edit tools
+            view.getRoot().getChildren().remove(model.getEditTools());
+
+            // Remove mouse handlers
+            model.getMainPattern().setOnMouseClicked(null);
+        }
     }
 
     private void loadPattern() {
@@ -385,7 +508,9 @@ class EmbroideryController {
         // Create additional pattern
         boolean[][] mainPattern = createMainPattern();
         boolean[][] additionalPattern = createAdditionalPattern(mainPattern);
+        boolean[][] backgroundPattern = createBackgroundPattern(mainPattern, additionalPattern);
         addPatternToGroup(model.getMainPattern(), additionalPattern, model.getAdditionalColor());
+        addPatternToGroup(model.getMainPattern(), backgroundPattern, Color.TRANSPARENT);
 
         // Mirror patterns
         mirrorGroup(model.getMainPattern(), false, true, true);
@@ -398,6 +523,7 @@ class EmbroideryController {
             view.getMirrorYButton().setDisable(false);
             view.getSaveButton().setDisable(false);
             view.getLoadButton().setDisable(false);
+            view.getEditButton().setDisable(false);
         });
     }
 
@@ -456,6 +582,17 @@ class EmbroideryController {
             }
         }
         return additional;
+    }
+    private boolean[][] createBackgroundPattern(boolean[][] mainPattern, boolean[][] additionalPattern) {
+        boolean[][] background = new boolean[EmbroideryConstants.EMBROIDERY_SIZE][EmbroideryConstants.EMBROIDERY_SIZE];
+        for (int i = 0; i < mainPattern.length; i++) {
+            for (int j = 0; j < mainPattern[i].length; j++) {
+                if (!mainPattern[i][j] && !additionalPattern[i][j]) {
+                    background[i][j] = true;
+                }
+            }
+        }
+        return background;
     }
 
     private void mirrorX() {
