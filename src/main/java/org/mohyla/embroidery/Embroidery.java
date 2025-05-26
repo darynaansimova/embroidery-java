@@ -1,23 +1,38 @@
 package org.mohyla.embroidery;
 
 import javafx.animation.FadeTransition;
+import javafx.animation.RotateTransition;
 import javafx.animation.SequentialTransition;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Button;
+import javafx.scene.control.ColorPicker;
 import javafx.scene.image.Image;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.ImagePattern;
 import javafx.scene.paint.Paint;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import javafx.scene.transform.Rotate;
+import javafx.scene.transform.Scale;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +42,7 @@ public class Embroidery extends Application {
 
     private static final int EMBROIDERY_SIZE = 11;
     private static final int CROSS_SIZE = 15;
-    private static final double MIN_SIZE = 0.5;
+    private static final double MIN_SIZE = 1;
     private static final boolean[][] LETTER_D = {
             {},
             {},
@@ -92,9 +107,13 @@ public class Embroidery extends Application {
     private static final Group root = new Group();
     private static Group main = new Group();
     private static final Group additional = new Group();
-    private static final Button button = new Button();
-    private static final Button button2 = new Button();
+    private static final Button buttonX = new Button();
+    private static final Button buttonY = new Button();
+    private static final Button buttonColor = new Button();
+    private static final Button buttonSave = new Button();
     SequentialTransition transition = new SequentialTransition();
+    private static Color colorMain = Color.BLACK;
+    private static Color colorAdditional = Color.DARKRED;
     @Override
     public void start(Stage stage){
         stage.setTitle("Вишивка");
@@ -113,7 +132,7 @@ public class Embroidery extends Application {
     private void embroideryRoot(){
         Text text = new Text("Дарина");
         text.setFont(new Font("Helvetica", 50));
-        text.setFill(Color.DARKRED);
+        text.setFill(colorAdditional);
         text.setStyle("-fx-font-weight: bold");
         text.setX((double) WINDOW_SIZE/2 - text.getBoundsInLocal().getWidth() / 2);
         text.setY(text.getBoundsInLocal().getHeight());
@@ -125,13 +144,13 @@ public class Embroidery extends Application {
         root.getChildren().add(additional);
 
         for (boolean[][] oneLetter : NAME) {
-            main = embroidery(main, oneLetter, Color.BLACK);
+            main = embroidery(main, oneLetter, colorMain);
         }
 
         boolean[][] mainP = mainPattern();
         boolean[][] addP = additionalPattern(mainP);
 
-        main = embroidery(main, addP, Color.DARKRED);
+        main = embroidery(main, addP, colorAdditional);
 
         main = mirrorX(main, false, true);
 
@@ -140,8 +159,9 @@ public class Embroidery extends Application {
         transition.play();
 
         transition.setOnFinished(event -> {
-                    button.setDisable(false);
-                    button2.setDisable(false);
+                    buttonX.setDisable(false);
+                    buttonY.setDisable(false);
+                    buttonSave.setDisable(false);
                 });
     }
 
@@ -266,93 +286,196 @@ public class Embroidery extends Application {
     }
 
     private void initButtons(){
-        button.setText("Відобразити горизонтально");
-        button.setFont(new Font("Helvetica", 20));
-        button.setLayoutX((double) (WINDOW_SIZE / 4));
-        button.setLayoutY((double) (WINDOW_SIZE * 4) /5);
-        button.setDisable(true);
-        root.getChildren().add(button);
+        buttonX.setText("Відобразити горизонтально");
+        buttonX.setFont(new Font("Helvetica", 10));
+        buttonX.setDisable(true);
+        root.getChildren().add(buttonX);
 
-        button2.setText("Відобразити вертикально");
-        button2.setFont(new Font("Helvetica", 20));
-        button2.setLayoutX((double) (WINDOW_SIZE / 4));
-        button2.setLayoutY(button.getLayoutY()+ 50);
-        button2.setDisable(true);
-        root.getChildren().add(button2);
+        buttonY.setText("Відобразити вертикально");
+        buttonY.setFont(new Font("Helvetica", 10));
+        buttonY.setDisable(true);
+        root.getChildren().add(buttonY);
 
-        button.setOnAction(actionEvent -> {
-            // Центр до масштабування
-            double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+        buttonColor.setText("Змінити колір");
+        buttonColor.setFont(new Font("Helvetica", 10));
+        root.getChildren().add(buttonColor);
 
-            double height = main.getBoundsInParent().getHeight();
-            double width = main.getBoundsInParent().getWidth();
+        buttonSave.setText("Зберегти PNG");
+        buttonSave.setFont(new Font("Helvetica", 10));
+        buttonSave.setDisable(true);
+        root.getChildren().add(buttonSave);
 
-            double scaleOld = main.getScaleX();
+// Відкласти позиціонування до моменту, коли розміри вже будуть обчислені
+        Platform.runLater(() -> {
+            double baseY = (double) (WINDOW_SIZE * 4) / 5;
 
-            if(height*2>width) {
-                // Масштабуємо
-                main.setScaleX(main.getScaleX() * 0.5);
-                main.setScaleY(main.getScaleY() * 0.5);
-            }
+            buttonX.setLayoutX((double) (WINDOW_SIZE / 3) - buttonX.getWidth() / 2);
+            buttonX.setLayoutY(baseY);
 
-            // Дзеркалимо
-            main = mirrorX(main, true, false);
+            buttonY.setLayoutX((double) (WINDOW_SIZE / 3) - buttonY.getWidth() / 2);
+            buttonY.setLayoutY(buttonX.getLayoutY() + buttonX.getHeight() + 5);
 
-            // Центр після змін
-            double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+            buttonColor.setLayoutX((double) (WINDOW_SIZE*2 / 3) - buttonColor.getWidth() / 2);
+            buttonColor.setLayoutY(baseY);
 
-            // Компенсуємо зсув
-            double dx = centerXBefore - centerXAfter;
-            double dy = centerYBefore - centerYAfter;
+            buttonSave.setLayoutX((double) (WINDOW_SIZE * 2 / 3) - buttonSave.getWidth() / 2);
+            buttonSave.setLayoutY(buttonColor.getLayoutY() + buttonColor.getHeight() + 5);
+        });
 
-            main.setLayoutX(main.getLayoutX() + dx);
-            main.setLayoutY(main.getLayoutY() + dy);
 
-            if((main.getScaleX()<scaleOld
-                    || (main.getScaleX()==scaleOld && main.getBoundsInParent().getHeight()*2>main.getBoundsInParent().getWidth()))
-                    && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
-                button.setDisable(true);
+        buttonX.setOnAction(actionEvent -> {
+            mirrorX();
+        });
+
+        buttonY.setOnAction(actionEvent -> {
+            mirrorY();
+        });
+
+        buttonColor.setOnAction(actionEvent -> {
+            changeColor();
+        });
+
+        buttonSave.setOnAction(event -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Save High-Res PNG");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG files (*.png)", "*.png"));
+            File file = fileChooser.showSaveDialog(null);
+            if (file != null) {
+                saveNodeAsHighResPng(main, 10.0, file);  // 10.0 = 10x resolution
             }
         });
 
-        button2.setOnAction(actionEvent -> {
-            // Зберігаємо центр до трансформацій
-            double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+    }
 
-            double height = main.getBoundsInParent().getHeight();
-            double width = main.getBoundsInParent().getWidth();
+    private void changeColor() {
+        if(colorMain==Color.BLACK&&colorAdditional==Color.DARKRED){
+            colorMain=Color.ROYALBLUE;
+            colorAdditional=Color.GOLD;
+        }
+        else if(colorMain==Color.ROYALBLUE&&colorAdditional==Color.GOLD){
+            colorMain=Color.BLACK;
+            colorAdditional=Color.DARKRED;
+        }
+        List<Node> originalChildren = new ArrayList<>(main.getChildren());
+        for (Node node : originalChildren) {
+            if (node instanceof Rectangle r) {
+                Paint paint = r.getFill();
 
-            double scaleOld = main.getScaleY();
-
-            if(width*2>height) {
-                // Масштабуємо
-                main.setScaleX(main.getScaleX() * 0.5);
-                main.setScaleY(main.getScaleY() * 0.5);
+                if(paint instanceof Color){
+                    if(paint == Color.BLACK){
+                        r.setFill(Color.ROYALBLUE);
+                    }
+                    else if(paint == Color.DARKRED){
+                        r.setFill(Color.GOLD);
+                    }
+                    else if(paint == Color.ROYALBLUE){
+                        r.setFill(Color.BLACK);
+                    }
+                    else if(paint == Color.GOLD){
+                        r.setFill(Color.DARKRED);
+                    }
+                }
             }
+        }
+    }
 
-            // Дзеркалимо по осі Y (горизонтальній)
-            main = mirrorY(main, true, false);
+    private void mirrorX(){
+        // Центр до масштабування
+        double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
 
-            // Зберігаємо центр після трансформацій
-            double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-            double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+        double height = main.getBoundsInParent().getHeight();
+        double width = main.getBoundsInParent().getWidth();
 
-            // Компенсуємо зміщення, щоб зберегти положення по центру
-            double dx = centerXBefore - centerXAfter;
-            double dy = centerYBefore - centerYAfter;
+        double scaleOld = main.getScaleX();
 
-            main.setLayoutX(main.getLayoutX() + dx);
-            main.setLayoutY(main.getLayoutY() + dy);
+        if(height*2>width) {
+            // Масштабуємо
+            main.setScaleX(main.getScaleX() * 0.5);
+            main.setScaleY(main.getScaleY() * 0.5);
+        }
 
-            if((main.getScaleY()<scaleOld
-                    || (main.getScaleY()==scaleOld && main.getBoundsInParent().getWidth()*2>main.getBoundsInParent().getHeight()))
-                    && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
-                button2.setDisable(true);
-            }
-        });
+        main = mirrorX(main, true, false);
 
+        // Центр після змін
+        double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+        // Компенсуємо зсув
+        double dx = centerXBefore - centerXAfter;
+        double dy = centerYBefore - centerYAfter;
+
+        main.setLayoutX(main.getLayoutX() + dx);
+        main.setLayoutY(main.getLayoutY() + dy);
+
+        if((main.getScaleX()<scaleOld
+                || (main.getScaleX()==scaleOld && main.getBoundsInParent().getHeight()*2>main.getBoundsInParent().getWidth()))
+                && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
+            buttonX.setDisable(true);
+        }
+    }
+
+    private void mirrorY(){
+        // Зберігаємо центр до трансформацій
+        double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+        double height = main.getBoundsInParent().getHeight();
+        double width = main.getBoundsInParent().getWidth();
+
+        double scaleOld = main.getScaleY();
+
+        if(width*2>height) {
+            // Масштабуємо
+            main.setScaleX(main.getScaleX() * 0.5);
+            main.setScaleY(main.getScaleY() * 0.5);
+        }
+
+        // Дзеркалимо по осі Y (горизонтальній)
+        main = mirrorY(main, true, false);
+
+        // Зберігаємо центр після трансформацій
+        double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+        // Компенсуємо зміщення, щоб зберегти положення по центру
+        double dx = centerXBefore - centerXAfter;
+        double dy = centerYBefore - centerYAfter;
+
+        main.setLayoutX(main.getLayoutX() + dx);
+        main.setLayoutY(main.getLayoutY() + dy);
+
+        if((main.getScaleY()<scaleOld
+                || (main.getScaleY()==scaleOld && main.getBoundsInParent().getWidth()*2>main.getBoundsInParent().getHeight()))
+                && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
+            buttonY.setDisable(true);
+        }
+    }
+
+    private void saveNodeAsHighResPng(Node node, double scaleFactor, File outputFile) {
+        // Set up snapshot parameters with scaling
+        SnapshotParameters params = new SnapshotParameters();
+        params.setTransform(new Scale(scaleFactor, scaleFactor));
+
+        // Get the snapshot
+        WritableImage image = node.snapshot(params, null);
+
+        // Extract pixels manually (no SwingFXUtils)
+        PixelReader reader = image.getPixelReader();
+        int width = (int) image.getWidth();
+        int height = (int) image.getHeight();
+
+        int[] buffer = new int[width * height];
+        reader.getPixels(0, 0, width, height, PixelFormat.getIntArgbInstance(), buffer, 0, width);
+
+        BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        bufferedImage.setRGB(0, 0, width, height, buffer, 0, width);
+
+        // Save to PNG
+        try {
+            ImageIO.write(bufferedImage, "png", outputFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
