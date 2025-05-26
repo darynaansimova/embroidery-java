@@ -33,12 +33,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Embroidery extends Application {
+    public static void main(String[] args) {
+        launch(args);
+    }
 
-    private static final int WINDOW_SIZE = 600;
+    @Override
+    public void start(Stage stage) {
+        EmbroideryModel model = new EmbroideryModel();
+        EmbroideryView view = new EmbroideryView(model);
+        EmbroideryController controller = new EmbroideryController(model, view);
 
-    private static final int EMBROIDERY_SIZE = 11;
-    private static final int CROSS_SIZE = 15;
-    private static final double MIN_SIZE = 1;
+        Scene scene = new Scene(view.getRoot(), EmbroideryConstants.WINDOW_SIZE, EmbroideryConstants.WINDOW_SIZE);
+        try {
+            Paint paint = new ImagePattern(new Image(getClass().getResource("/canvas.jpg").toExternalForm()));
+            scene.setFill(paint);
+        } catch (Exception e) {
+            scene.setFill(Color.BEIGE);
+        }
+
+        stage.setTitle("Вишивка (Дарина Ансімова)");
+        stage.setResizable(false);
+        stage.setScene(scene);
+        stage.show();
+
+        controller.initialize();
+    }
+}
+
+class EmbroideryConstants {
+    public static final int WINDOW_SIZE = 600;
+    public static final int EMBROIDERY_SIZE = 11;
+    public static final int CROSS_SIZE = 15;
+    public static final double MIN_SIZE = 1;
+
     private static final boolean[][] LETTER_D = {
             {},
             {},
@@ -99,145 +126,230 @@ public class Embroidery extends Application {
             {},
             {},
             {}};
-    private static final boolean[][][] NAME = {LETTER_D, LETTER_A, LETTER_R, LETTER_Y, LETTER_N, LETTER_A};
-    private static final Group root = new Group();
-    private static Group main = new Group();
-    private static final Group additional = new Group();
-    private static final Button buttonX = new Button();
-    private static final Button buttonY = new Button();
-    private static final Button buttonColor = new Button();
-    private static final Button buttonSave = new Button();
-    SequentialTransition transition = new SequentialTransition();
-    private static Color colorMain = Color.BLACK;
-    private static Color colorAdditional = Color.DARKRED;
-    @Override
-    public void start(Stage stage){
-        stage.setTitle("Вишивка (Дарина Ансімова)");
-        stage.setResizable(false);
-        Paint paint = Color.BEIGE;
-        embroideryRoot();
-        try{
-            paint = new ImagePattern(new Image(getClass().getResource("/canvas.jpg").toExternalForm()));
-        } catch (Exception e) {} finally {
-            Scene scene = new Scene(root, WINDOW_SIZE, WINDOW_SIZE, paint);
-            stage.setScene(scene);
-            stage.show();
-        }
+    public static final boolean[][][] NAME = {LETTER_D, LETTER_A, LETTER_R, LETTER_Y, LETTER_N, LETTER_A};
+}
+
+class EmbroideryModel {
+    private Color mainColor = Color.BLACK;
+    private Color additionalColor = Color.DARKRED;
+    private Group mainPattern = new Group();
+    private Group additionalPattern = new Group();
+    private SequentialTransition animation = new SequentialTransition();
+
+    public Color getMainColor() {
+        return mainColor;
     }
 
-    private void embroideryRoot(){
-        Text text = new Text("Дарина");
-        text.setFont(new Font("Helvetica", 50));
-        text.setFill(colorAdditional);
-        text.setStyle("-fx-font-weight: bold");
-        text.setX((double) WINDOW_SIZE/2 - text.getBoundsInLocal().getWidth() / 2);
-        text.setY(text.getBoundsInLocal().getHeight());
-        root.getChildren().add(text);
-
-        initButtons();
-
-        root.getChildren().add(main);
-        root.getChildren().add(additional);
-
-        for (boolean[][] oneLetter : NAME) {
-            main = embroidery(main, oneLetter, colorMain);
-        }
-
-        boolean[][] mainP = mainPattern();
-        boolean[][] addP = additionalPattern(mainP);
-
-        main = embroidery(main, addP, colorAdditional);
-
-        main = mirrorX(main, false, true);
-
-        main = mirrorY(main, false, true);
-
-        transition.play();
-
-        transition.setOnFinished(event -> {
-                    buttonX.setDisable(false);
-                    buttonY.setDisable(false);
-                    buttonSave.setDisable(false);
-                });
+    public void setMainColor(Color mainColor) {
+        this.mainColor = mainColor;
     }
 
-    private Group mirrorX(Group original, boolean includeCenter, boolean doTransition) {
-        Bounds bounds = original.getBoundsInLocal();
-        double centerY = (bounds.getMinY() + bounds.getMaxY()) / 2;
-        double height = bounds.getHeight();
+    public Color getAdditionalColor() {
+        return additionalColor;
+    }
 
-        // Створюємо копію списку дітей
-        List<Node> originalChildren = new ArrayList<>(original.getChildren());
+    public void setAdditionalColor(Color additionalColor) {
+        this.additionalColor = additionalColor;
+    }
 
-        for (Node node : originalChildren) {
-            if (node instanceof Rectangle r) {
-                Paint paint = r.getFill();
+    public Group getMainPattern() {
+        return mainPattern;
+    }
 
-                // Mirror across centerY
-                double mirroredY = 2 * centerY - r.getY() - r.getHeight()
-                        + height
-                        - (includeCenter ? 0 : r.getHeight());
+    public Group getAdditionalPattern() {
+        return additionalPattern;
+    }
 
-                Rectangle mirroredRect = new Rectangle(r.getX(), mirroredY, r.getWidth(), r.getHeight());
-                mirroredRect.setFill(paint);
+    public SequentialTransition getAnimation() {
+        return animation;
+    }
 
-                original.getChildren().add(mirroredRect);
+    public void toggleColors() {
+        if (mainColor == Color.BLACK && additionalColor == Color.DARKRED) {
+            mainColor = Color.ROYALBLUE;
+            additionalColor = Color.GOLD;
+        } else if (mainColor == Color.ROYALBLUE && additionalColor == Color.GOLD) {
+            mainColor = Color.BLACK;
+            additionalColor = Color.DARKRED;
+        }
+    }
+}
 
-                if(doTransition) {
-                    FadeTransition tr = new FadeTransition(Duration.millis(50), mirroredRect);
-                    tr.setFromValue(0);
-                    tr.setToValue(1);
-                    transition.getChildren().add(tr);
+class EmbroideryView {
+    private final Group root = new Group();
+    private final Text titleText;
+    private final Button mirrorXButton;
+    private final Button mirrorYButton;
+    private final Button colorButton;
+    private final Button saveButton;
+
+    public EmbroideryView(EmbroideryModel model) {
+        // Initialize title text
+        titleText = new Text("Дарина");
+        titleText.setFont(new Font("Helvetica", 50));
+        titleText.setFill(model.getAdditionalColor());
+        titleText.setStyle("-fx-font-weight: bold");
+
+        // Initialize buttons
+        mirrorXButton = new Button("Відобразити горизонтально");
+        mirrorXButton.setFont(new Font("Helvetica", 10));
+        mirrorXButton.setDisable(true);
+
+        mirrorYButton = new Button("Відобразити вертикально");
+        mirrorYButton.setFont(new Font("Helvetica", 10));
+        mirrorYButton.setDisable(true);
+
+        colorButton = new Button("Змінити колір");
+        colorButton.setFont(new Font("Helvetica", 10));
+
+        saveButton = new Button("Зберегти PNG");
+        saveButton.setFont(new Font("Helvetica", 10));
+        saveButton.setDisable(true);
+
+        // Add all elements to root
+        root.getChildren().addAll(
+                titleText,
+                model.getMainPattern(),
+                model.getAdditionalPattern(),
+                mirrorXButton,
+                mirrorYButton,
+                colorButton,
+                saveButton
+        );
+
+        // Position elements
+        Platform.runLater(this::positionElements);
+    }
+
+    private void positionElements() {
+        // Position title text
+        titleText.setX((double) EmbroideryConstants.WINDOW_SIZE / 2 - titleText.getBoundsInLocal().getWidth() / 2);
+        titleText.setY(titleText.getBoundsInLocal().getHeight());
+
+        // Position buttons
+        double baseY = (double) (EmbroideryConstants.WINDOW_SIZE * 4) / 5;
+
+        mirrorXButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE / 3) - mirrorXButton.getWidth() / 2);
+        mirrorXButton.setLayoutY(baseY);
+
+        mirrorYButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE / 3) - mirrorYButton.getWidth() / 2);
+        mirrorYButton.setLayoutY(mirrorXButton.getLayoutY() + mirrorXButton.getHeight() + 5);
+
+        colorButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE * 2 / 3) - colorButton.getWidth() / 2);
+        colorButton.setLayoutY(baseY);
+
+        saveButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE * 2 / 3) - saveButton.getWidth() / 2);
+        saveButton.setLayoutY(colorButton.getLayoutY() + colorButton.getHeight() + 5);
+    }
+
+    public Group getRoot() {
+        return root;
+    }
+
+    public Button getMirrorXButton() {
+        return mirrorXButton;
+    }
+
+    public Button getMirrorYButton() {
+        return mirrorYButton;
+    }
+
+    public Button getColorButton() {
+        return colorButton;
+    }
+
+    public Button getSaveButton() {
+        return saveButton;
+    }
+
+    public void updateTitleColor(Color color) {
+        titleText.setFill(color);
+    }
+}
+
+class EmbroideryController {
+    private final EmbroideryModel model;
+    private final EmbroideryView view;
+
+    public EmbroideryController(EmbroideryModel model, EmbroideryView view) {
+        this.model = model;
+        this.view = view;
+    }
+
+    public void initialize() {
+        setupEventHandlers();
+        createInitialPattern();
+    }
+
+    private void setupEventHandlers() {
+        view.getMirrorXButton().setOnAction(event -> mirrorX());
+        view.getMirrorYButton().setOnAction(event -> mirrorY());
+        view.getColorButton().setOnAction(event -> changeColor());
+        view.getSaveButton().setOnAction(event -> savePattern());
+    }
+
+    private void createInitialPattern() {
+        // Create name pattern
+        for (boolean[][] letter : EmbroideryConstants.NAME) {
+            addPatternToGroup(model.getMainPattern(), letter, model.getMainColor());
+        }
+
+        // Create additional pattern
+        boolean[][] mainPattern = createMainPattern();
+        boolean[][] additionalPattern = createAdditionalPattern(mainPattern);
+        addPatternToGroup(model.getMainPattern(), additionalPattern, model.getAdditionalColor());
+
+        // Mirror patterns
+        mirrorGroup(model.getMainPattern(), false, true, true);
+        mirrorGroup(model.getMainPattern(), true, true, true);
+
+        // Play animation
+        model.getAnimation().play();
+        model.getAnimation().setOnFinished(event -> {
+            view.getMirrorXButton().setDisable(false);
+            view.getMirrorYButton().setDisable(false);
+            view.getSaveButton().setDisable(false);
+        });
+    }
+
+    private void addPatternToGroup(Group group, boolean[][] pattern, Color color) {
+        for (int i = 0; i < pattern.length; i++) {
+            for (int j = 0; j < pattern[i].length; j++) {
+                if (pattern[i][j]) {
+                    Rectangle rectangle = createCrossStitch(
+                            (double) EmbroideryConstants.WINDOW_SIZE / 2 + EmbroideryConstants.CROSS_SIZE * j,
+                            (double) EmbroideryConstants.WINDOW_SIZE / 2 - (double) ((EmbroideryConstants.EMBROIDERY_SIZE * 2 - 1) * EmbroideryConstants.CROSS_SIZE) / 2 + EmbroideryConstants.CROSS_SIZE * i,
+                            color
+                    );
+                    group.getChildren().add(rectangle);
+                    addFadeAnimation(rectangle);
                 }
             }
         }
-
-        return original;
     }
 
-    private Group mirrorY(Group original, boolean includeCenter, boolean doTransition) {
-        Bounds bounds = original.getBoundsInLocal();
-        double centerX = (bounds.getMinX() + bounds.getMaxX()) / 2;
-        double width = bounds.getWidth();
-
-        // Створюємо копію списку дітей
-        List<Node> originalChildren = new ArrayList<>(original.getChildren());
-
-        for (Node node : originalChildren) {
-            if (node instanceof Rectangle r) {
-                Paint paint = r.getFill();
-
-                // Mirror across centerX (по вертикальній осі)
-                double mirroredX = 2 * centerX - r.getX() - r.getWidth()
-                        - width
-                        + (includeCenter ? 0 : r.getWidth());
-
-                Rectangle mirroredRect = new Rectangle(mirroredX, r.getY(), r.getWidth(), r.getHeight());
-                mirroredRect.setFill(paint);
-
-                original.getChildren().add(mirroredRect);
-
-                if(doTransition) {
-                    FadeTransition tr = new FadeTransition(Duration.millis(50), mirroredRect);
-                    tr.setFromValue(0);
-                    tr.setToValue(1);
-                    transition.getChildren().add(tr);
-                }
-            }
-        }
-
-        return original;
+    private Rectangle createCrossStitch(double x, double y, Color color) {
+        Rectangle rectangle = new Rectangle(EmbroideryConstants.CROSS_SIZE, EmbroideryConstants.CROSS_SIZE);
+        rectangle.setFill(color);
+        rectangle.setX(x);
+        rectangle.setY(y);
+        return rectangle;
     }
 
+    private void addFadeAnimation(Node node) {
+        FadeTransition transition = new FadeTransition(Duration.millis(100), node);
+        transition.setFromValue(0);
+        transition.setToValue(1);
+        model.getAnimation().getChildren().add(transition);
+    }
 
-
-    private boolean[][] mainPattern(){
-        boolean[][] pattern = new boolean[EMBROIDERY_SIZE][EMBROIDERY_SIZE];
-        for(int l = 0; l <NAME.length; l++){
-            for(int m = 0; m <NAME[l].length; m++){
-                for(int k = 0; k<NAME[l][m].length; k++){
-                    if(NAME[l][m][k]){
-                        pattern[m][k] = true;
+    private boolean[][] createMainPattern() {
+        boolean[][] pattern = new boolean[EmbroideryConstants.EMBROIDERY_SIZE][EmbroideryConstants.EMBROIDERY_SIZE];
+        for (boolean[][] letter : EmbroideryConstants.NAME) {
+            for (int i = 0; i < letter.length; i++) {
+                for (int j = 0; j < letter[i].length; j++) {
+                    if (letter[i][j]) {
+                        pattern[i][j] = true;
                     }
                 }
             }
@@ -245,129 +357,131 @@ public class Embroidery extends Application {
         return pattern;
     }
 
-    private boolean[][] additionalPattern(boolean[][] pattern){
-        boolean[][] additional = new boolean[EMBROIDERY_SIZE][EMBROIDERY_SIZE];
-        for(int i = 0; i < pattern.length; i++){
-            for(int j = 0; j < pattern[i].length; j++){
-                if(!pattern[i][j]){
-                    if(Math.random()>0.7){
-                        additional[i][j] = true;
-                    }
-                }
-                else{
-                    additional[i][j] = false;
+    private boolean[][] createAdditionalPattern(boolean[][] mainPattern) {
+        boolean[][] additional = new boolean[EmbroideryConstants.EMBROIDERY_SIZE][EmbroideryConstants.EMBROIDERY_SIZE];
+        for (int i = 0; i < mainPattern.length; i++) {
+            for (int j = 0; j < mainPattern[i].length; j++) {
+                if (!mainPattern[i][j] && Math.random() > 0.7) {
+                    additional[i][j] = true;
                 }
             }
         }
         return additional;
     }
 
-    private Group embroidery(Group group, boolean[][] pattern, Color color){
-        for(int i = 0; i < pattern.length; i++){
-            for(int j = 0; j < pattern[i].length; j++){
-                if(pattern[i][j]){
-                    Rectangle rectangle = new Rectangle(CROSS_SIZE, CROSS_SIZE);
-                    rectangle.setFill(color);
-                    rectangle.setX((double) WINDOW_SIZE / 2 + CROSS_SIZE*j);
-                    rectangle.setY((double) WINDOW_SIZE / 2 - (double) ((EMBROIDERY_SIZE*2-1) * CROSS_SIZE) / 2 + CROSS_SIZE*i);
-                    group.getChildren().add(rectangle);
-                    FadeTransition tr = new FadeTransition(Duration.millis(100), rectangle);
-                    tr.setFromValue(0);
-                    tr.setToValue(1);
-                    transition.getChildren().add(tr);
-                }
-            }
+    private void mirrorX() {
+        Group main = model.getMainPattern();
+        double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+        double height = main.getBoundsInParent().getHeight();
+        double width = main.getBoundsInParent().getWidth();
+        double scaleOld = main.getScaleX();
+
+        if (height * 2 > width) {
+            main.setScaleX(main.getScaleX() * 0.5);
+            main.setScaleY(main.getScaleY() * 0.5);
         }
-        return group;
+
+        mirrorGroup(main, false, true, false);
+
+        double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+
+        main.setLayoutX(main.getLayoutX() + (centerXBefore - centerXAfter));
+        main.setLayoutY(main.getLayoutY() + (centerYBefore - centerYAfter));
+
+        if ((main.getScaleX() < scaleOld
+                || (main.getScaleX() == scaleOld && main.getBoundsInParent().getHeight() * 2 > main.getBoundsInParent().getWidth()))
+                && (main.getScaleX() * EmbroideryConstants.CROSS_SIZE < EmbroideryConstants.MIN_SIZE
+                || main.getScaleY() * EmbroideryConstants.CROSS_SIZE < EmbroideryConstants.MIN_SIZE)) {
+            view.getMirrorXButton().setDisable(true);
+        }
     }
 
-    private void initButtons(){
-        buttonX.setText("Відобразити горизонтально");
-        buttonX.setFont(new Font("Helvetica", 10));
-        buttonX.setDisable(true);
-        root.getChildren().add(buttonX);
+    private void mirrorY() {
+        Group main = model.getMainPattern();
+        double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
+        double height = main.getBoundsInParent().getHeight();
+        double width = main.getBoundsInParent().getWidth();
+        double scaleOld = main.getScaleY();
 
-        buttonY.setText("Відобразити вертикально");
-        buttonY.setFont(new Font("Helvetica", 10));
-        buttonY.setDisable(true);
-        root.getChildren().add(buttonY);
+        if (width * 2 > height) {
+            main.setScaleX(main.getScaleX() * 0.5);
+            main.setScaleY(main.getScaleY() * 0.5);
+        }
 
-        buttonColor.setText("Змінити колір");
-        buttonColor.setFont(new Font("Helvetica", 10));
-        root.getChildren().add(buttonColor);
+        mirrorGroup(main, true, true, false);
 
-        buttonSave.setText("Зберегти PNG");
-        buttonSave.setFont(new Font("Helvetica", 10));
-        buttonSave.setDisable(true);
-        root.getChildren().add(buttonSave);
+        double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
+        double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
 
-// Відкласти позиціонування до моменту, коли розміри вже будуть обчислені
-        Platform.runLater(() -> {
-            double baseY = (double) (WINDOW_SIZE * 4) / 5;
+        main.setLayoutX(main.getLayoutX() + (centerXBefore - centerXAfter));
+        main.setLayoutY(main.getLayoutY() + (centerYBefore - centerYAfter));
 
-            buttonX.setLayoutX((double) (WINDOW_SIZE / 3) - buttonX.getWidth() / 2);
-            buttonX.setLayoutY(baseY);
-
-            buttonY.setLayoutX((double) (WINDOW_SIZE / 3) - buttonY.getWidth() / 2);
-            buttonY.setLayoutY(buttonX.getLayoutY() + buttonX.getHeight() + 5);
-
-            buttonColor.setLayoutX((double) (WINDOW_SIZE*2 / 3) - buttonColor.getWidth() / 2);
-            buttonColor.setLayoutY(baseY);
-
-            buttonSave.setLayoutX((double) (WINDOW_SIZE * 2 / 3) - buttonSave.getWidth() / 2);
-            buttonSave.setLayoutY(buttonColor.getLayoutY() + buttonColor.getHeight() + 5);
-        });
-
-
-        buttonX.setOnAction(actionEvent -> {
-            mirrorX();
-        });
-
-        buttonY.setOnAction(actionEvent -> {
-            mirrorY();
-        });
-
-        buttonColor.setOnAction(actionEvent -> {
-            changeColor();
-        });
-
-        buttonSave.setOnAction(event -> {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Save PNG");
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG files (*.png)", "*.png"));
-            File file = fileChooser.showSaveDialog(null);
-            if (file != null) {
-                saveNodeAsHighResPng(main, 10.0, file);  // 10.0 = 10x resolution
-            }
-        });
-
+        if ((main.getScaleY() < scaleOld
+                || (main.getScaleY() == scaleOld && main.getBoundsInParent().getWidth() * 2 > main.getBoundsInParent().getHeight()))
+                && (main.getScaleX() * EmbroideryConstants.CROSS_SIZE < EmbroideryConstants.MIN_SIZE
+                || main.getScaleY() * EmbroideryConstants.CROSS_SIZE < EmbroideryConstants.MIN_SIZE)) {
+            view.getMirrorYButton().setDisable(true);
+        }
     }
 
-    private void changeColor() {
-        if(colorMain==Color.BLACK&&colorAdditional==Color.DARKRED){
-            colorMain=Color.ROYALBLUE;
-            colorAdditional=Color.GOLD;
-        }
-        else if(colorMain==Color.ROYALBLUE&&colorAdditional==Color.GOLD){
-            colorMain=Color.BLACK;
-            colorAdditional=Color.DARKRED;
-        }
-        List<Node> originalChildren = new ArrayList<>(main.getChildren());
+    private void mirrorGroup(Group group, boolean mirrorY, boolean includeCenter, boolean doTransition) {
+        Bounds bounds = group.getBoundsInLocal();
+        double centerX = (bounds.getMinX() + bounds.getMaxX()) / 2;
+        double centerY = (bounds.getMinY() + bounds.getMaxY()) / 2;
+        double width = bounds.getWidth();
+        double height = bounds.getHeight();
+
+        List<Node> originalChildren = new ArrayList<>(group.getChildren());
         for (Node node : originalChildren) {
             if (node instanceof Rectangle r) {
                 Paint paint = r.getFill();
+                Rectangle mirroredRect;
 
-                if(paint instanceof Color){
-                    if(paint == Color.BLACK){
+                if (mirrorY) {
+                    // Mirror across Y axis (vertical)
+                    double mirroredX = 2 * centerX - r.getX() - r.getWidth()
+                            - width
+                            + (includeCenter ? 0 : r.getWidth());
+                    mirroredRect = new Rectangle(mirroredX, r.getY(), r.getWidth(), r.getHeight());
+                } else {
+                    // Mirror across X axis (horizontal)
+                    double mirroredY = 2 * centerY - r.getY() - r.getHeight()
+                            + height
+                            - (includeCenter ? 0 : r.getHeight());
+                    mirroredRect = new Rectangle(r.getX(), mirroredY, r.getWidth(), r.getHeight());
+                }
+
+                mirroredRect.setFill(paint);
+                group.getChildren().add(mirroredRect);
+
+                if (doTransition) {
+                    FadeTransition tr = new FadeTransition(Duration.millis(50), mirroredRect);
+                    tr.setFromValue(0);
+                    tr.setToValue(1);
+                    model.getAnimation().getChildren().add(tr);
+                }
+            }
+        }
+    }
+
+    private void changeColor() {
+        model.toggleColors();
+        view.updateTitleColor(model.getAdditionalColor());
+
+        for (Node node : model.getMainPattern().getChildren()) {
+            if (node instanceof Rectangle r) {
+                Paint paint = r.getFill();
+                if (paint instanceof Color) {
+                    if (paint == Color.BLACK) {
                         r.setFill(Color.ROYALBLUE);
-                    }
-                    else if(paint == Color.DARKRED){
+                    } else if (paint == Color.DARKRED) {
                         r.setFill(Color.GOLD);
-                    }
-                    else if(paint == Color.ROYALBLUE){
+                    } else if (paint == Color.ROYALBLUE) {
                         r.setFill(Color.BLACK);
-                    }
-                    else if(paint == Color.GOLD){
+                    } else if (paint == Color.GOLD) {
                         r.setFill(Color.DARKRED);
                     }
                 }
@@ -375,88 +489,21 @@ public class Embroidery extends Application {
         }
     }
 
-    private void mirrorX(){
-        // Центр до масштабування
-        double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-        double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-        double height = main.getBoundsInParent().getHeight();
-        double width = main.getBoundsInParent().getWidth();
-
-        double scaleOld = main.getScaleX();
-
-        if(height*2>width) {
-            // Масштабуємо
-            main.setScaleX(main.getScaleX() * 0.5);
-            main.setScaleY(main.getScaleY() * 0.5);
-        }
-
-        main = mirrorX(main, true, false);
-
-        // Центр після змін
-        double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-        double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-        // Компенсуємо зсув
-        double dx = centerXBefore - centerXAfter;
-        double dy = centerYBefore - centerYAfter;
-
-        main.setLayoutX(main.getLayoutX() + dx);
-        main.setLayoutY(main.getLayoutY() + dy);
-
-        if((main.getScaleX()<scaleOld
-                || (main.getScaleX()==scaleOld && main.getBoundsInParent().getHeight()*2>main.getBoundsInParent().getWidth()))
-                && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
-            buttonX.setDisable(true);
-        }
-    }
-
-    private void mirrorY(){
-        // Зберігаємо центр до трансформацій
-        double centerXBefore = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-        double centerYBefore = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-        double height = main.getBoundsInParent().getHeight();
-        double width = main.getBoundsInParent().getWidth();
-
-        double scaleOld = main.getScaleY();
-
-        if(width*2>height) {
-            // Масштабуємо
-            main.setScaleX(main.getScaleX() * 0.5);
-            main.setScaleY(main.getScaleY() * 0.5);
-        }
-
-        // Дзеркалимо по осі Y (горизонтальній)
-        main = mirrorY(main, true, false);
-
-        // Зберігаємо центр після трансформацій
-        double centerXAfter = main.getBoundsInParent().getMinX() + main.getBoundsInParent().getWidth() / 2;
-        double centerYAfter = main.getBoundsInParent().getMinY() + main.getBoundsInParent().getHeight() / 2;
-
-        // Компенсуємо зміщення, щоб зберегти положення по центру
-        double dx = centerXBefore - centerXAfter;
-        double dy = centerYBefore - centerYAfter;
-
-        main.setLayoutX(main.getLayoutX() + dx);
-        main.setLayoutY(main.getLayoutY() + dy);
-
-        if((main.getScaleY()<scaleOld
-                || (main.getScaleY()==scaleOld && main.getBoundsInParent().getWidth()*2>main.getBoundsInParent().getHeight()))
-                && (main.getScaleX()*CROSS_SIZE<MIN_SIZE || main.getScaleY()*CROSS_SIZE<MIN_SIZE)){
-            buttonY.setDisable(true);
+    private void savePattern() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save PNG");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG files (*.png)", "*.png"));
+        File file = fileChooser.showSaveDialog(null);
+        if (file != null) {
+            saveNodeAsHighResPng(model.getMainPattern(), 10.0, file);
         }
     }
 
     private void saveNodeAsHighResPng(Node node, double scaleFactor, File outputFile) {
-        // Set up snapshot parameters with scaling
         SnapshotParameters params = new SnapshotParameters();
         params.setTransform(new Scale(scaleFactor, scaleFactor));
 
-        // Get the snapshot
         WritableImage image = node.snapshot(params, null);
-
-        // Extract pixels manually (no SwingFXUtils)
         PixelReader reader = image.getPixelReader();
         int width = (int) image.getWidth();
         int height = (int) image.getHeight();
@@ -467,7 +514,6 @@ public class Embroidery extends Application {
         BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         bufferedImage.setRGB(0, 0, width, height, buffer, 0, width);
 
-        // Save to PNG
         try {
             ImageIO.write(bufferedImage, "png", outputFile);
         } catch (IOException e) {
