@@ -112,7 +112,7 @@ public class Embroidery extends Application {
     private static Color colorAdditional = Color.DARKRED;
     @Override
     public void start(Stage stage){
-        stage.setTitle("Вишивка");
+        stage.setTitle("Вишивка (Дарина Ансімова)");
         stage.setResizable(false);
         Paint paint = Color.BEIGE;
         embroideryRoot();
