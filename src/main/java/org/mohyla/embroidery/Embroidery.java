@@ -9,6 +9,7 @@ import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -182,6 +183,7 @@ class EmbroideryView {
     private final Button mirrorYButton;
     private final Button colorButton;
     private final Button saveButton;
+    private final Button loadButton;
 
     public EmbroideryView(EmbroideryModel model) {
         // Initialize title text
@@ -206,6 +208,10 @@ class EmbroideryView {
         saveButton.setFont(new Font("Helvetica", 10));
         saveButton.setDisable(true);
 
+        loadButton = new Button("Відкрити PNG");
+        loadButton.setFont(new Font("Helvetica", 10));
+        loadButton.setDisable(true);
+
         // Add all elements to root
         root.getChildren().addAll(
                 titleText,
@@ -214,7 +220,8 @@ class EmbroideryView {
                 mirrorXButton,
                 mirrorYButton,
                 colorButton,
-                saveButton
+                saveButton,
+                loadButton
         );
 
         // Position elements
@@ -240,6 +247,9 @@ class EmbroideryView {
 
         saveButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE * 2 / 3) - saveButton.getWidth() / 2);
         saveButton.setLayoutY(colorButton.getLayoutY() + colorButton.getHeight() + 5);
+
+        loadButton.setLayoutX((double) (EmbroideryConstants.WINDOW_SIZE * 2 / 3) - loadButton.getWidth() / 2);
+        loadButton.setLayoutY(saveButton.getLayoutY() + saveButton.getHeight() + 5);
     }
 
     public Group getRoot() {
@@ -260,6 +270,10 @@ class EmbroideryView {
 
     public Button getSaveButton() {
         return saveButton;
+    }
+
+    public Button getLoadButton() {
+        return loadButton;
     }
 
     public void updateTitleColor(Color color) {
@@ -286,6 +300,80 @@ class EmbroideryController {
         view.getMirrorYButton().setOnAction(event -> mirrorY());
         view.getColorButton().setOnAction(event -> changeColor());
         view.getSaveButton().setOnAction(event -> savePattern());
+        view.getLoadButton().setOnAction(event -> loadPattern());
+    }
+
+    private void loadPattern() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Відкрити схему вишивки");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("PNG files (*.png)", "*.png"));
+
+        File file = fileChooser.showOpenDialog(null);
+        if (file != null) {
+            try {
+                Image image = new Image(file.toURI().toString());
+                if(image.getHeight()!=image.getWidth()) {
+                    showAlert("Помилка","Зображення має бути квадратним!");
+                    return;
+                }
+                if(file.length()>300*1024) {
+                    showAlert("Помилка","Зображення має бути не більше 300 КБ!");
+                    return;
+                }
+                model.getAnimation().getChildren().clear();
+                processLoadedImage(image);
+            } catch (Exception e) {
+                showAlert("Помилка завантаження",
+                        "Не вдалося завантажити зображення: " + e.getMessage());
+            }
+        }
+    }
+
+    private void processLoadedImage(Image image) {
+        // Очищаємо поточний візерунок
+        model.getMainPattern().getChildren().clear();
+        model.getMainPattern().setScaleX(1);
+        model.getMainPattern().setScaleY(1);
+        model.getMainPattern().setLayoutX(0);
+        model.getMainPattern().setLayoutY(0);
+        model.getAnimation().getChildren().clear();
+        view.getColorButton().setDisable(true);
+
+        // Визначаємо розміри зображення
+        int imgWidth = (int)image.getWidth();
+        int imgHeight = (int)image.getHeight();
+
+        // Створюємо PixelReader для читання кольорів
+        PixelReader pixelReader = image.getPixelReader();
+
+        // Визначаємо крок для вибірки пікселів (враховуємо розмір хрестика)
+        int step = (imgWidth/21);
+
+        for (int y = 0; y < imgHeight-imgHeight/21; y += step) {
+            for (int x = 0; x < imgWidth-imgWidth/21; x += step) {
+                // Отримуємо колір центрального пікселя області
+                Color color = pixelReader.getColor(
+                        Math.min(x + step/2, imgWidth-1),
+                        Math.min(y + step/2, imgHeight-1));
+                    // Створюємо хрестик вишивки
+                Rectangle rectangle = createCrossStitch(
+                        EmbroideryConstants.WINDOW_SIZE / 2 - EmbroideryConstants.CROSS_SIZE*21/2 + EmbroideryConstants.CROSS_SIZE * (x / step),
+                        EmbroideryConstants.WINDOW_SIZE / 2 - EmbroideryConstants.CROSS_SIZE*21/2 + EmbroideryConstants.CROSS_SIZE * (y / step),
+                        color);
+
+                // Додаємо до основного візерунку
+                model.getMainPattern().getChildren().add(rectangle);
+            }
+        }
+    }
+
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     private void createInitialPattern() {
@@ -309,6 +397,7 @@ class EmbroideryController {
             view.getMirrorXButton().setDisable(false);
             view.getMirrorYButton().setDisable(false);
             view.getSaveButton().setDisable(false);
+            view.getLoadButton().setDisable(false);
         });
     }
 
