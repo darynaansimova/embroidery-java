@@ -11,6 +11,7 @@ import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -357,8 +358,12 @@ class EmbroideryController {
 
             // Create a fine grid overlay
             Group gridOverlay = new Group();
-            for (int i = ((int)model.getMainPattern().getBoundsInLocal().getMinX() % EmbroideryConstants.CROSS_SIZE); i < EmbroideryConstants.WINDOW_SIZE; i += EmbroideryConstants.CROSS_SIZE) {
-                for (int j = ((int)model.getMainPattern().getBoundsInLocal().getMinY() % EmbroideryConstants.CROSS_SIZE); j < EmbroideryConstants.WINDOW_SIZE; j += EmbroideryConstants.CROSS_SIZE) {
+            for (int i = ((int)model.getMainPattern().getBoundsInLocal().getMinX() % EmbroideryConstants.CROSS_SIZE);
+                 i < EmbroideryConstants.WINDOW_SIZE;
+                 i += EmbroideryConstants.CROSS_SIZE) {
+                for (int j = ((int)model.getMainPattern().getBoundsInLocal().getMinY() % EmbroideryConstants.CROSS_SIZE);
+                     j < EmbroideryConstants.WINDOW_SIZE;
+                     j += EmbroideryConstants.CROSS_SIZE) {
                     Rectangle gridCell = new Rectangle(i, j, 1, 1);
                     gridCell.setFill(Color.BLACK);
                     gridOverlay.getChildren().add(gridCell);
@@ -375,8 +380,18 @@ class EmbroideryController {
             rubberButton.setLayoutX(10);
             rubberButton.setLayoutY(50);
 
+            // Create symmetry checkboxes
+            CheckBox verticalSymmetry = new CheckBox("Вертикальна симетрія");
+            verticalSymmetry.setLayoutX(10);
+            verticalSymmetry.setLayoutY(90);
+
+            CheckBox horizontalSymmetry = new CheckBox("Горизонтальна симетрія");
+            horizontalSymmetry.setLayoutX(10);
+            horizontalSymmetry.setLayoutY(120);
+
             // Add tools to edit group
-            editTools.getChildren().addAll(gridOverlay, colorPicker, rubberButton);
+            editTools.getChildren().addAll(gridOverlay, colorPicker, rubberButton,
+                    verticalSymmetry, horizontalSymmetry);
 
             // Store reference to edit tools in model
             model.setEditTools(editTools);
@@ -386,12 +401,30 @@ class EmbroideryController {
 
             // Set up mouse interaction for editing
             model.getMainPattern().setOnMousePressed(e -> {
+                // Calculate grid-aligned position
+                double gridX = Math.floor(e.getX() / EmbroideryConstants.CROSS_SIZE) * EmbroideryConstants.CROSS_SIZE;
+                double gridY = Math.floor(e.getY() / EmbroideryConstants.CROSS_SIZE) * EmbroideryConstants.CROSS_SIZE;
+
                 if (e.getTarget() instanceof Rectangle) {
+                    // Existing rectangle clicked
                     Rectangle target = (Rectangle) e.getTarget();
-                    if (e.isShiftDown() || model.getEditMode()== EmbroideryModel.EditMode.ERASE) { // Use rubber when Shift is pressed
-                        target.setFill(Color.TRANSPARENT);
+                    if (e.isShiftDown() || model.getEditMode() == EmbroideryModel.EditMode.ERASE) {
+                        target.setFill(Color.WHITE);
+                        // Apply symmetry for erase
+                        applySymmetry(target, verticalSymmetry.isSelected(), horizontalSymmetry.isSelected(), Color.WHITE);
                     } else {
                         target.setFill(colorPicker.getValue());
+                        // Apply symmetry for paint
+                        applySymmetry(target, verticalSymmetry.isSelected(), horizontalSymmetry.isSelected(), colorPicker.getValue());
+                    }
+                } else {
+                    // Empty space clicked - create new rectangle if in paint mode
+                    if (model.getEditMode() == EmbroideryModel.EditMode.PAINT) {
+                        Rectangle rectangle = createCrossStitch(gridX, gridY, colorPicker.getValue());
+                        model.getMainPattern().getChildren().add(rectangle);
+
+                        // Apply symmetry for new rectangle
+                        applySymmetry(rectangle, verticalSymmetry.isSelected(), horizontalSymmetry.isSelected(), colorPicker.getValue());
                     }
                 }
             });
@@ -422,7 +455,42 @@ class EmbroideryController {
             view.getRoot().getChildren().remove(model.getEditTools());
 
             // Remove mouse handlers
-            model.getMainPattern().setOnMouseClicked(null);
+            model.getMainPattern().setOnMousePressed(null);
+        }
+    }
+
+    private void applySymmetry(Rectangle original, boolean vertical, boolean horizontal, Color color) {
+        Bounds bounds = model.getMainPattern().getBoundsInLocal();
+        double centerX = bounds.getMinX() + bounds.getWidth()/2;
+        double centerY = bounds.getMinY() + bounds.getHeight()/2;
+        Paint paint = original.getFill();
+
+        if (vertical) {
+            // Vertical symmetry (mirror across Y axis)
+            double mirroredX = 2 * centerX - original.getX() - original.getWidth();
+            Rectangle mirrored = createCrossStitch(mirroredX, original.getY(), color);
+            model.getMainPattern().getChildren().add(mirrored);
+            if(paint != Color.WHITE)
+                addFadeAnimation(mirrored);
+        }
+
+        if (horizontal) {
+            // Horizontal symmetry (mirror across X axis)
+            double mirroredY = 2 * centerY - original.getY() - original.getHeight();
+            Rectangle mirrored = createCrossStitch(original.getX(), mirroredY, color);
+            model.getMainPattern().getChildren().add(mirrored);
+            if(paint != Color.WHITE)
+                addFadeAnimation(mirrored);
+        }
+
+        if (vertical && horizontal) {
+            // Both symmetries - mirror diagonally
+            double mirroredX = 2 * centerX - original.getX() - original.getWidth();
+            double mirroredY = 2 * centerY - original.getY() - original.getHeight();
+            Rectangle mirrored = createCrossStitch(mirroredX, mirroredY, color);
+            model.getMainPattern().getChildren().add(mirrored);
+            if(paint != Color.WHITE)
+                addFadeAnimation(mirrored);
         }
     }
 
@@ -461,7 +529,6 @@ class EmbroideryController {
         model.getMainPattern().setLayoutX(0);
         model.getMainPattern().setLayoutY(0);
         model.getAnimation().getChildren().clear();
-        view.getColorButton().setDisable(true);
 
         // Визначаємо розміри зображення
         int imgWidth = (int)image.getWidth();
@@ -510,7 +577,7 @@ class EmbroideryController {
         boolean[][] additionalPattern = createAdditionalPattern(mainPattern);
         boolean[][] backgroundPattern = createBackgroundPattern(mainPattern, additionalPattern);
         addPatternToGroup(model.getMainPattern(), additionalPattern, model.getAdditionalColor());
-        addPatternToGroup(model.getMainPattern(), backgroundPattern, Color.TRANSPARENT);
+        addPatternToGroup(model.getMainPattern(), backgroundPattern, Color.WHITE);
 
         // Mirror patterns
         mirrorGroup(model.getMainPattern(), false, true, true);
@@ -537,7 +604,8 @@ class EmbroideryController {
                             color
                     );
                     group.getChildren().add(rectangle);
-                    addFadeAnimation(rectangle);
+                    if(color != Color.WHITE)
+                        addFadeAnimation(rectangle);
                 }
             }
         }
